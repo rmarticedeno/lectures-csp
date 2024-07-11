@@ -64,6 +64,15 @@ def t_NUMBER(t):
 def t_error(t):
         print("Illegal character '%s'" % t.value[0])
 
+def p_expression(p):
+    '''expression : expression rule
+                  | rule'''
+    if len(p) == 2:
+        p[0] = [p[1]]
+    elif len(p) == 3:
+        p[0] = p[1] + [p[2]]
+
+
 def p_rule(p):
     '''rule : leftarg GTHAN factor
             | leftarg LTHAN factor
@@ -100,6 +109,10 @@ class RuleParser:
     
 if __name__ == "__main__":     
     dsl_code = """
+    RESOURCE_2 > GROUP_30
+    RESOURCE_2 > GROUP_30
+    RESOURCE_2 > GROUP_30
+    RESOURCE_2 > GROUP_30
     RESOURCE_2 > GROUP_30
     """
     parser = RuleParser()

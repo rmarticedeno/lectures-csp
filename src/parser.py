@@ -1,6 +1,27 @@
 import ply.lex as lex
 import ply.yacc as yacc
 
+NUMBER, PHASE, ROUND, PIPELINE, RESOURCE, GROUP = 1, 2, 3, 4, 5, 6
+
+class Entity:
+    def __init__(self, value, type):
+        self.value = value
+        self.type = type
+
+class BinaryComparison:
+    def __init__(self, lpart: Entity, rpart: Entity, operator: str):
+        self.lpart = lpart
+        self.rpart = rpart
+        self.operator = operator
+
+class RuleParser:
+    def __init__(self):
+        self._parser = yacc.yacc(optimize=True)
+        self.lexer = lex.lex(optimize=True)
+
+    def parse(self, data):
+        return self._parser.parse(data, lexer=self.lexer)
+
 # Full set of tokens
 tokens = (
         'NUMBER',
@@ -33,32 +54,32 @@ def t_NEWLINE(t):
 
 def t_PHASE_ID(t):
     r'PHASE_\d+'
-    t.value = ("PHASE", int(t.value[6:]))
+    t.value = Entity(int(t.value[6:]), PHASE)
     return t
 
 def t_ROUND_ID(t):
     r'ROUND_\d+'
-    t.value = ("ROUND", int(t.value[6:]))
+    t.value = Entity(int(t.value[6:]), ROUND)
     return t
 
 def t_PIPELINE_ID(t):
     r'PIPELINE_\d+'
-    t.value = ("PIPELINE", int(t.value[9:]))
+    t.value = Entity(int(t.value[9:]), PIPELINE)
     return t
 
 def t_GROUP_ID(t):
     r'GROUP_\d+'
-    t.value = ("GROUP", int(t.value[6:]))
+    t.value = Entity(int(t.value[6:]), GROUP)
     return t
 
 def t_RESOURCE_ID(t):
     r'RESOURCE_\d+'
-    t.value = ("RESOURCE", int(t.value[9:]))
+    t.value = Entity(int(t.value[9:]), RESOURCE)
     return t
 
 def t_NUMBER(t):
     r'\d+'
-    t.value = int(t.value)
+    t.value = Entity(int(t.value), NUMBER)
     return t
 
 def t_error(t):
@@ -72,7 +93,6 @@ def p_expression(p):
     elif len(p) == 3:
         p[0] = p[1] + [p[2]]
 
-
 def p_rule(p):
     '''rule : leftarg GTHAN factor
             | leftarg LTHAN factor
@@ -80,7 +100,7 @@ def p_rule(p):
             | leftarg LETHAN factor
             | leftarg NEQUAL factor
             | leftarg EQUAL factor'''
-    p[0] = (p[1], p[2], p[3])
+    p[0] = BinaryComparison(p[1], p[3], p[2])
 
 def p_leftarg(p):
     '''leftarg : RESOURCE_ID
@@ -98,22 +118,21 @@ def p_factor(p):
 
 def p_error(p):
     print("Syntax error: ", p)
-
-class RuleParser:
-    def __init__(self):
-        self._parser = yacc.yacc(optimize=True)
-        self.lexer = lex.lex(optimize=True)
-
-    def parse(self, data):
-        return self._parser.parse(data, lexer=self.lexer)
     
 if __name__ == "__main__":     
     dsl_code = """
-    RESOURCE_2 > GROUP_30
-    RESOURCE_2 > GROUP_30
-    RESOURCE_2 > GROUP_30
-    RESOURCE_2 > GROUP_30
-    RESOURCE_2 > GROUP_30
+    RESOURCE_2 > 30
+    RESOURCE_2 < GROUP_30
+    RESOURCE_2 > PHASE_4
+    RESOURCE_2 >= ROUND_2
+    RESOURCE_2 > PIPELINE_14
+    RESOURCE_2 > RESOURCE_35
+    GROUP_2 = 30
+    GROUP_2 > GROUP_30
+    GROUP_2 > PHASE_4
+    GROUP_2 <= ROUND_2
+    GROUP_2 > PIPELINE_14
+    GROUP_2 != RESOURCE_35
     """
     parser = RuleParser()
     print(parser.parse(dsl_code))

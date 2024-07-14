@@ -3,6 +3,7 @@ from pydantic_core import from_json
 from pydantic import BaseModel, PositiveInt, NonNegativeInt
 from parser import RuleParser, NUMBER, PHASE, ROUND, PIPELINE, RESOURCE, GROUP
 from ortools.sat.python import cp_model
+from operator import gt, lt, ge, le, eq, ne
 
 class JobConfiguration(BaseModel):
     pipeline_count: PositiveInt
@@ -53,8 +54,18 @@ class JobSolver:
             for restriction in self.constrains:
                 targets = []
                 rtargets = []
-                modificator = 0
+                modificator = lambda x : x
+                
+                op_dict = {
+                    '=': eq,
+                    '!=': ne,
+                    '>=': ge,
+                    '<=': le,
+                    '<': lt,
+                    '>': gt,  
+                }
 
+                # Left side of the comparison
                 if restriction.lpart.type == RESOURCE:
                     value = restriction.lpart.value
                     targets.append(self.variables[value-1])
@@ -64,114 +75,65 @@ class JobSolver:
                     for v in self.configuration.groups[value-1]:
                         targets.append(self.variables[v-1])
 
+                # right side of the comparison
                 if restriction.rpart.type == RESOURCE:
-                        value = restriction.rpart.value
-                        rtargets.append(self.variables[value-1])
+                    value = restriction.rpart.value
+                    rtargets.append(self.variables[value-1])
 
                 elif restriction.rpart.type == GROUP:
-                        value = restriction.rpart.value
-                        for v in self.configuration.groups[value-1]:
-                            rtargets.append(self.variables[v-1])
+                    value = restriction.rpart.value
+                    for v in self.configuration.groups[value-1]:
+                        rtargets.append(self.variables[v-1])
 
                 else:
                     value = restriction.rpart.value
                     rtargets.append(value)
 
-                    if restriction.rpart.type == PIPELINE:
-                        modificator = self.configuration.pipeline_count
+                for v in targets:
+                    for rv in rtargets:
+                        lpart = v
+                        rpart = rv
+                        oper = op_dict[restriction.operator]
 
-                    elif restriction.rpart.type == ROUND:
-                        modificator = self.configuration.pipeline_count
+                        if restriction.rpart.type == PHASE:
+                            ## lambda x : (x - 1) % self.configuration.phase_count + 1
+                            mod = model.NewIntVar(0, self.configuration.phase_count, '')
+                            model.add_modulo_equality(mod, v - 1, self.configuration.phase_count)
+                            lpart = mod
+                            rpart = rv + 1
 
-                    elif restriction.rpart.type == PHASE:
-                        modificator = self.configuration.phase_count
+                        elif restriction.rpart.type == PIPELINE:
+                            ## lambda x : (x - 1) // self.configuration.pipeline_count + 1
+                            div = model.NewIntVar(0, self.configuration.pipeline_count, '')
+                            model.add_division_equality(div, v - 1, self.configuration.pipeline_count)
+                            lpart = div
+                            rpart = rv + 1
 
-                if restriction.operator == '=':
-                    for v in targets:
-                        for rv in rtargets:
-                            if modificator:
-                                self.model.add(v % modificator == rv)
-                            else:
-                                self.model.add(v == rv)
+                        elif restriction.rpart.type == ROUND:
+                            ## lambda x : ((x - 1 - (x - 1) % self.configuration.phase_count) / self.configuration.phase_count ) % self.configuration.pipeline_count + 1
+                            mod1 = model.NewIntVar(0, self.configuration.phase_count, '')
+                            model.add_modulo_equality(mod1, v - 1, self.configuration.phase_count)
+                            div = model.NewIntVar(0, self.possibilities +1 , '')
+                            model.add_division_equality(div, v - 1 - mod1, self.configuration.phase_count)
+                            mod2 = model.NewIntVar(0, self.configuration.pipeline_count, '')
+                            model.add_modulo_equality(mod2, div, self.configuration.pipeline_count)
+                            lpart = mod2
+                            rpart = rv + 1
 
-                elif restriction.operator == '!=':
-                    for v in targets:
-                        for rv in rtargets:
-                            if modificator:
-                                self.model.add(v % modificator != rv)
-                            else:
-                                self.model.add(v != rv)
-
-                elif restriction.operator == '>=':
-                    for v in targets:
-                        for rv in rtargets:
-                            if modificator:
-                                self.model.add(v % modificator >= rv)
-                            else:
-                                self.model.add(v >= rv)
+                        self.model.add(oper(lpart, rpart))
                 
-                elif restriction.operator == '<=':
-                    for v in targets:
-                        for rv in rtargets:
-                            if modificator:
-                                self.model.add(v % modificator <= rv)
-                            else:
-                                self.model.add(v <= rv)
-                
-                elif restriction.operator == '<':
-                    for v in targets:
-                        for rv in rtargets:
-                            if modificator:
-                                self.model.add(v % modificator != rv)
-                            else:
-                                self.model.add(v != rv)
-                
-                else:
-                    for v in targets:
-                        for rv in rtargets:
-                            if modificator:
-                                self.model.add(v % modificator > rv)
-                            else:
-                                self.model.add(v > rv)
-                
+    def solve(self):
+        status = self.solver.solve(self.model)
 
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            print("Solution:")
 
+        print(f"Optimal Schedule Length: {self.solver.objective_value}")
+        for x in self.variables:
+            print(x, self.solver.value(x))
 
-
-classrooms = 11
-lectures_per_day = 6
-days = 7
-courses = 10
-lessons = 144
-
-all_classrooms = classrooms * lectures_per_day * days
-
-
-model = cp_model.CpModel()
-
-distribution = []
-
-for i in range(lessons):
-    distribution.append(model.new_int_var(1, lessons+1, f"Lesson_{i+1}"))
-
-model.add_all_different(distribution)
-
-model.add(distribution[0] == 120)
-
-solver = cp_model.CpSolver()
-status = solver.solve(model)
-
-if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        print("Solution:")
-
-        print(f"Optimal Schedule Length: {solver.objective_value}")
-        for x in distribution:
-            print(x, solver.value(x))
-else:
-    print("No solution found.")
-
-    # Statistics.
-    print("\nStatistics")
-    print(f"  - conflicts: {solver.num_conflicts}")
-    print(f"  - branches : {solver.num_branches}")
-    print(f"  - wall time: {solver.wall_time}s")
+        # Statistics.
+        print("\nStatistics")
+        print(f"  - conflicts: {self.solver.num_conflicts}")
+        print(f"  - branches : {self.solver.num_branches}")
+        print(f"  - wall time: {self.solver.wall_time}s")

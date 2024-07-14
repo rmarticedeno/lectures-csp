@@ -1,7 +1,7 @@
 from typing import List
 from pydantic_core import from_json
 from pydantic import BaseModel, PositiveInt, NonNegativeInt
-from parser import RuleParser, NUMBER, PHASE, ROUND, PIPELINE, RESOURCE, GROUP
+from .parser import RuleParser, NUMBER, PHASE, ROUND, PIPELINE, RESOURCE, GROUP
 from ortools.sat.python import cp_model
 from operator import gt, lt, ge, le, eq, ne
 
@@ -18,7 +18,7 @@ class JobConfiguration(BaseModel):
 
 class JobSolver:
     def __init__(self, configuration: JobConfiguration):
-        self.possibilities = configuration.pipeline_count * self.configuration.phase_count * self.configuration.round_count
+        self.possibilities = configuration.pipeline_count * configuration.phase_count * configuration.round_count
         self.configuration = configuration
         self.variables = []
         self.model = cp_model.CpModel()
@@ -28,7 +28,7 @@ class JobSolver:
     def build(self):
         # add variables
         for i in range(self.configuration.resource_count):
-             self.variables = self.model.new_int_var(1, self.possibilities+1, f"{i+1}")
+             self.variables.append(self.model.new_int_var(1, self.possibilities+1, f"{i+1}"))
         
         # restrictions
 

@@ -1,7 +1,6 @@
 import ply.lex as lex
 import ply.yacc as yacc
-from pydantic import BaseModel, PositiveInt, NonNegativeInt
-from pydantic_core import from_json
+from typing import List
 
 NUMBER, PHASE, ROUND, PIPELINE, RESOURCE, GROUP = 1, 2, 3, 4, 5, 6
 
@@ -16,33 +15,12 @@ class BinaryComparison:
         self.rpart = rpart
         self.operator = operator
 
-class JobConfiguration(BaseModel):
-    pipeline_count: PositiveInt
-    phase_count: PositiveInt
-    resource_count: PositiveInt
-    round_count: PositiveInt
-    group_count: NonNegativeInt
-    rule_count: NonNegativeInt
-    max_allowed_resource_per_phase: NonNegativeInt | None
-    rules: str | None
-
-class JobContext:
-    def __init__(self, configuration: JobConfiguration):
-        self.pipelines = configuration.pipeline_count
-        self.phases = configuration.phase_count
-        self.resources = configuration.resource_count
-        self.rounds = configuration.round_count
-        self.groups = configuration.group_count
-        self.rules = configuration.rule_count
-        self.max_res_per_pha = self.max_res_per_pha
-        self.constrains = RuleParser().parse(configuration.rules) 
-
 class RuleParser:
     def __init__(self):
         self._parser = yacc.yacc(optimize=True)
         self.lexer = lex.lex(optimize=True)
 
-    def parse(self, data):
+    def parse(self, data) -> List[BinaryComparison]: 
         return self._parser.parse(data, lexer=self.lexer)
 
 # Full set of tokens

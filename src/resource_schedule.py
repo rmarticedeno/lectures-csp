@@ -45,8 +45,9 @@ class JobSolver:
                         upper_bound = i * self.configuration.pipeline_count * self.configuration.phase_count + self.configuration.round_count
                         condition = self.model.NewBoolVar('')
                         group_variables.append(condition)
-                        model.add(lower_bound <= self.variables[t-1] <= upper_bound).only_enforce_if(condition)
-                    model.add(sum(group_variables) <= self.configuration.max_allowed_resource_per_round)
+                        self.model.add(self.variables[t-1] >= lower_bound).only_enforce_if(condition)
+                        self.model.add(self.variables[t-1] <= upper_bound).only_enforce_if(condition)
+                    self.model.add(sum(group_variables) <= self.configuration.max_allowed_resource_per_round)
         
         if self.configuration.rule_count:
             # apply restriction rules
@@ -97,28 +98,28 @@ class JobSolver:
 
                         if restriction.rpart.type == PHASE:
                             ## lambda x : (x - 1) % self.configuration.phase_count + 1
-                            mod = model.NewIntVar(0, self.configuration.phase_count, '')
-                            model.add_modulo_equality(mod, v - 1, self.configuration.phase_count)
+                            mod = self.model.NewIntVar(0, self.configuration.phase_count, '')
+                            self.model.add_modulo_equality(mod, v - 1, self.configuration.phase_count)
                             lpart = mod
-                            rpart = rv + 1
+                            rpart = rv - 1
 
                         elif restriction.rpart.type == PIPELINE:
                             ## lambda x : (x - 1) // self.configuration.pipeline_count + 1
-                            div = model.NewIntVar(0, self.configuration.pipeline_count, '')
-                            model.add_division_equality(div, v - 1, self.configuration.pipeline_count)
+                            div = self.model.NewIntVar(0, self.configuration.pipeline_count, '')
+                            self.model.add_division_equality(div, v - 1, self.configuration.pipeline_count)
                             lpart = div
-                            rpart = rv + 1
+                            rpart = rv - 1
 
                         elif restriction.rpart.type == ROUND:
                             ## lambda x : ((x - 1 - (x - 1) % self.configuration.phase_count) / self.configuration.phase_count ) % self.configuration.pipeline_count + 1
-                            mod1 = model.NewIntVar(0, self.configuration.phase_count, '')
-                            model.add_modulo_equality(mod1, v - 1, self.configuration.phase_count)
-                            div = model.NewIntVar(0, self.possibilities +1 , '')
-                            model.add_division_equality(div, v - 1 - mod1, self.configuration.phase_count)
-                            mod2 = model.NewIntVar(0, self.configuration.pipeline_count, '')
-                            model.add_modulo_equality(mod2, div, self.configuration.pipeline_count)
+                            mod1 =self. model.NewIntVar(0, self.configuration.phase_count, '')
+                            self.model.add_modulo_equality(mod1, v - 1, self.configuration.phase_count)
+                            div = self.model.NewIntVar(0, self.possibilities +1 , '')
+                            self.model.add_division_equality(div, v - 1 - mod1, self.configuration.phase_count)
+                            mod2 = self.model.NewIntVar(0, self.configuration.pipeline_count, '')
+                            self.model.add_modulo_equality(mod2, div, self.configuration.pipeline_count)
                             lpart = mod2
-                            rpart = rv + 1
+                            rpart = rv - 1
 
                         self.model.add(oper(lpart, rpart))
                 
@@ -128,9 +129,9 @@ class JobSolver:
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             print("Solution:")
 
-        print(f"Optimal Schedule Length: {self.solver.objective_value}")
-        for x in self.variables:
-            print(x, self.solver.value(x))
+            print(f"Optimal Schedule Length: {self.solver.objective_value}")
+            for x in self.variables:
+                print(x, self.solver.value(x))
 
         # Statistics.
         print("\nStatistics")
